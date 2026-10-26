@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FocusCam AI — Local Privacy-First Study Assistant</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --card: #181b22;
+      --border: #2a2f3a;
+      --accent: #00e676;
+      --warn: #ffab40;
+      --danger: #ff5252;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 24px 16px;
+      text-align: center;
+    }
+    .dashboard {
+      max-width: 720px;
+      margin: auto;
+      background: var(--card);
+      padding: 24px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+      margin-bottom: 18px;
+    }
+    .greeting { text-align: left; }
+    .name-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .name-input {
+      background: transparent;
+      border: 1px dashed transparent;
+      color: var(--accent);
+      font-size: 24px;
+      font-weight: 700;
+      font-family: inherit;
+      width: 170px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      transition: 0.2s;
+    }
+    .name-input:hover, .name-input:focus {
+      border-color: var(--muted);
+      background: #12141a;
+      outline: none;
+    }
+    .status {
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 6px;
+      color: var(--muted);
+    }
+    .timer {
+      font-size: 44px;
+      font-weight: 800;
+      color: #ffeb3b;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 1px;
+    }
+    .video-box {
+      position: relative;
+      width: 100%;
+      max-width: 640px;
+      height: 360px;
+      margin: auto;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #08090c;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    video {
+      transform: scaleX(-1);
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .camera-placeholder {
+      position: absolute;
+      color: var(--muted);
+      font-size: 14px;
+      pointer-events: none;
+    }
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .settings-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      background: #12141a;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font-size: 13px;
+    }
+    input[type="text"].subject-input, select {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    select { max-width: 220px; }
+    button {
+      border: none;
+      padding: 11px 20px;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-start { background: var(--accent); color: #000; }
+    .btn-start:hover { filter: brightness(1.1); }
+    .btn-stop { background: var(--danger); color: #fff; display: none; }
+    .btn-calibrate { background: #29b6f6; color: #000; display: none; }
+    .btn-secondary { background: #262b36; color: var(--text); font-size: 12px; padding: 8px 12px; }
+    .btn-secondary:hover { background: #323846; }
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      background: #262b36;
+      padding: 9px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .log-section {
+      margin-top: 24px;
+      text-align: left;
+      border-top: 1px solid var(--border);
+      padding-top: 18px;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    .footer {
+      margin-top: 18px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dashboard">
+    <div class="header">
+      <div class="greeting">
+        <div class="name-row">
+          <span>Hello,</span>
+          <input type="text" id="usernameInput" class="name-input" value="Scholar" title="Click to change your name" onchange="saveUsername()">
+          <span style="font-size: 14px; color: var(--muted); cursor: pointer;" onclick="document.getElementById('usernameInput').focus()">✏️</span>
+        </div>
+        <div class="status" id="statusText">Ready to start</div>
+      </div>
+      <div class="timer" id="timerDisplay">00:00:00</div>
+    </div>
+
+    <div class="video-box">
+      <div class="camera-placeholder" id="camPlaceholder">🔒 Camera stays 100% offline in your browser</div>
+      <video id="webcam" autoplay playsinline></video>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="subjectInput" class="subject-input" placeholder="📚 Subject (e.g., Physics)">
+      <button class="btn-start" id="startBtn" onclick="startAssistant()">▶ Start Studying</button>
+      <button class="btn-stop" id="stopBtn" onclick="stopAssistant()">⏹ Stop & Log Session</button>
+      <button class="btn-calibrate" id="calBtn" onclick="calibratePosture()">🎯 Set My Posture</button>
+      
+      <label class="toggle-label">
+        <input type="checkbox" id="postureToggle"> Posture Alerts
+      </label>
+    </div>
+
+    <div class="settings-bar">
+      <div>
+        <span>🎙️ Voice: </span>
+        <select id="voiceSelect" onchange="saveVoicePreference()"></select>
+        <button class="btn-secondary" onclick="testVoice()">🔊 Test</button>
+      </div>
+      <div style="color: var(--muted);">⚡ Battery-Saver AI: Checks every 4s</div>
+    </div>
+
+    <div class="log-section">
+      <div class="log-header">
+        <h3 style="margin: 0; font-size: 16px;">📊 Study Session Log</h3>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
+          <button class="btn-secondary" onclick="clearLogs()">🗑 Clear</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Subject</th>
+            <th>Start - End</th>
+            <th>Focused Time</th>
+          </tr>
+        </thead>
+        <tbody id="logTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="footer">
+      100% Client-Side Web App • Zero Server Uploads • Powered by MediaPipe & Web Speech API
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_USERNAME = "Scholar";
+    let studySeconds = 0, consecutiveSeconds = 0, awaySeconds = 0;
+    let isPresent = false, isRunning = false, lastPostureWarn = 0;
+    let aiInterval = null, clockInterval = null, mediaStream = null;
+    let sessionStartTime = "";
+    let availableVoices = [];
+
+    let currentY = 0.5, currentW = 0.3;
+    let maxAllowedY = 0.80, maxAllowedW = 0.52;
+
+    const videoElement = document.getElementById('webcam');
+    const camPlaceholder = document.getElementById('camPlaceholder');
+    const statusText = document.getElementById('statusText');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const postureToggle = document.getElementById('postureToggle');
+    const voiceSelect = document.getElementById('voiceSelect');
+    const usernameInput = document.getElementById('usernameInput');
+    const subjectInput = document.getElementById('subjectInput');
+
+    // Load saved username or fall back to DEFAULT_USERNAME
+    function getUsername() {
+      return usernameInput.value.trim() || DEFAULT_USERNAME;
+    }
+
+    function saveUsername() {
+      const name = getUsername();
+      usernameInput.value = name;
+      localStorage.setItem('focuscam_username', name);
+    }
+
+    function initUser() {
+      const savedName = localStorage.getItem('focuscam_username');
+      usernameInput.value = savedName ? savedName : DEFAULT_USERNAME;
+    }
+
+    // Load and prioritize natural cross-platform voices
+    function loadVoices() {
+      const allVoices = window.speechSynthesis.getVoices();
+      if (!allVoices.length) return;
+
+      availableVoices = allVoices.filter(v => v.lang.startsWith('en'));
+      if (!availableVoices.length) availableVoices = allVoices;
+
+      availableVoices.sort((a, b) => {
+        const score = (v) => {
+          let s = 0;
+          if (v.name.includes('Natural') || v.name.includes('Premium') || v.name.includes('Enhanced')) s += 5;
+          if (v.name.includes('Google') || v.name.includes('Online')) s += 4;
+          if (v.lang === 'en-IN' || v.name.includes('Rishi') || v.name.includes('Veena')) s += 3;
+          if (v.name.includes('Samantha') || v.name.includes('Daniel') || v.name.includes('Zira')) s += 2;
+          return s;
+        };
+        return score(b) - score(a);
+      });
+
+      const savedVoice = localStorage.getItem('focuscam_preferred_voice');
+      voiceSelect.innerHTML = availableVoices.map((v, i) => 
+        `<option value="${i}" ${v.name === savedVoice ? 'selected' : ''}>${v.name} (${v.lang})</option>`
+      ).join('');
+    }
+
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    setTimeout(loadVoices, 200);
+
+    function saveVoicePreference() {
+      const selected = availableVoices[voiceSelect.value];
+      if (selected) localStorage.setItem('focuscam_preferred_voice', selected.name);
+    }
+
+    function speak(text) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(text);
+      const selected = availableVoices[voiceSelect.value];
+      if (selected) msg.voice = selected;
+      msg.rate = 0.96;
+      msg.pitch = 1.02;
+      window.speechSynthesis.speak(msg);
+    }
+
+    function testVoice() {
+      speak(`Hello ${getUsername()}! Ready to start your study session?`);
+    }
+
+    function formatTime(totalSecs) {
+      const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+      const secs = String(totalSecs % 60).padStart(2, '0');
+      return `${hrs}:${mins}:${secs}`;
+    }
+
+    const faceDetection = new FaceDetection({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
+    });
+    faceDetection.setOptions({ model: 'short', minDetectionConfidence: 0.5 });
+
+    faceDetection.onResults((results) => {
+      if (!isRunning) return;
+      const now = Date.now();
+      const user = getUsername();
+
+      if (results.detections && results.detections.length > 0) {
+        if (!isPresent && awaySeconds > 15) {
+          speak(`Welcome back ${user}. Resuming timer.`);
+        }
+        isPresent = true;
+        awaySeconds = 0;
+
+        const box = results.detections[0].boundingBox;
+        currentY = box.yCenter;
+        currentW = box.width;
+
+        if (postureToggle.checked && (currentY > maxAllowedY || currentW > maxAllowedW)) {
+          statusText.innerText = "⚠️ Posture Check: Leaning too low or close";
+          statusText.style.color = "#ff5252";
+          if (now - lastPostureWarn > 45000) {
+            speak(`${user}, please check your posture.`);
+            lastPostureWarn = now;
+          }
+        } else {
+          statusText.innerText = "🟢 Focused & Studying";
+          statusText.style.color = "#00e676";
+        }
+      } else {
+        isPresent = false;
+        statusText.innerText = "⏸ Away - Timer Paused";
+        statusText.style.color = "#ffab40";
+      }
+    });
+
+    function calibratePosture() {
+      maxAllowedY = currentY + 0.14;
+      maxAllowedW = currentW + 0.14;
+      postureToggle.checked = true;
+      speak(`Posture calibrated for ${getUsername()}.`);
+      statusText.innerText = "🎯 Posture Calibrated!";
+    }
+
+    async function startAssistant() {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 360 } });
+      } catch (err) {
+        alert("Camera access was denied or no webcam was found. Please allow camera access in your browser.");
+        return;
+      }
+
+      studySeconds = 0; consecutiveSeconds = 0; awaySeconds = 0;
+      isRunning = true;
+      sessionStartTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      camPlaceholder.style.display = 'none';
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('stopBtn').style.display = 'inline-block';
+      document.getElementById('calBtn').style.display = 'inline-block';
+
+      const user = getUsername();
+      speak(`Hello ${user}. Let's start studying.`);
+      statusText.innerText = "Starting camera...";
+      videoElement.srcObject = mediaStream;
+
+      aiInterval = setInterval(async () => {
+        if (videoElement.readyState >= 2 && isRunning) {
+          await faceDetection.send({ image: videoElement });
+        }
+      }, 4000);
+
+      clockInterval = setInterval(() => {
+        if (!isRunning) return;
+        const currentName = getUsername();
+        if (isPresent) {
+          studySeconds++;
+          consecutiveSeconds++;
+          if (consecutiveSeconds === 3000) {
+            speak(`${currentName}, you have studied for 50 minutes. Take a 5 minute rest.`);
+          }
+        } else {
+          awaySeconds++;
+          if (awaySeconds === 300) {
+            speak(`Rest is over ${currentName}. Come back to your desk.`);
+            consecutiveSeconds = 0;
+          }
+        }
+        timerDisplay.innerText = formatTime(studySeconds);
+      }, 1000);
+    }
+
+    function stopAssistant() {
+      isRunning = false;
+      clearInterval(aiInterval);
+      clearInterval(clockInterval);
+
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
+      videoElement.srcObject = null;
+      camPlaceholder.style.display = 'block';
+
+      document.getElementById('startBtn').style.display = 'inline-block';
+      document.getElementById('stopBtn').style.display = 'none';
+      document.getElementById('calBtn').style.display = 'none';
+
+      const mins = Math.floor(studySeconds / 60);
+      statusText.innerText = `Session Stopped (${formatTime(studySeconds)} logged)`;
+      statusText.style.color = "#9ca3af";
+      speak(`Good job ${getUsername()}. Session saved. You studied for ${mins} minutes.`);
+
+      saveSessionLog();
+    }
+
+    function saveSessionLog() {
+      if (studySeconds < 5) return;
+      const logs = JSON.parse(localStorage.getItem('focuscam_study_logs') || '[]');
+      const endTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const subject = subjectInput.value.trim() || "General Study";
+
+      logs.unshift({
+        date: new Date().toLocaleDateString(),
+        subject: subject,
+        timeRange: `${sessionStartTime} - ${endTime}`,
+        duration: formatTime(studySeconds)
+      });
+      localStorage.setItem('focuscam_study_logs', JSON.stringify(logs));
+      renderLogs();
+    }
+
+    function renderLogs() {
+      const logs = JSON.parse(localStorage.getItem('focuscam_study_logs') || '[]');
+      const tbody = document.getElementById('logTableBody');
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#666;">No study sessions logged yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = logs.map(l => `
+        <tr>
+          <td>${l.date}</td>
+          <td>${l.subject || 'General Study'}</td>
+          <td>${l.timeRange}</td>
+          <td style="color:#00e676; font-weight:bold;">${l.duration}</td>
+        </tr>
+      `).join('');
+    }
+
+    function exportCSV() {
+      const logs = JSON.parse(localStorage.getItem('focuscam_study_logs') || '[]');
+      if (!logs.length) return alert("No sessions to export yet!");
+      let csv = "Date,Subject,Start - End,Duration\n" + 
+                logs.map(l => `"${l.date}","${l.subject || 'General Study'}","${l.timeRange}","${l.duration}"`).join("\n");
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${getUsername()}_Study_Log.csv`;
+      a.click();
+    }
+
+    function clearLogs() {
+      if (confirm("Clear all saved study logs?")) {
+        localStorage.removeItem('focuscam_study_logs');
+        renderLogs();
+      }
+    }
+
+    initUser();
+    renderLogs();
+  </script>
+</body>
+</html>
